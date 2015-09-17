@@ -1,3 +1,6 @@
+# Project specific binaries
+first
+
 # Object files
 *.o
 *.ko
