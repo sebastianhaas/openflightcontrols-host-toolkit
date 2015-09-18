@@ -64,6 +64,9 @@ else
 	echo "Finished."
 fi
 
+# Other dependencies
+sudo apt-get -qq -y --no-install-recommends install ncurses-dev
+
 # echo "Running unit tests..."
 # cd /vagrant
 # make clean
