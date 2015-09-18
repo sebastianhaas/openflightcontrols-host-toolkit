@@ -1,19 +1,113 @@
-#ifdef WIN32
-#include <windows.h>
-#endif
-#include <stdio.h>
-#include <stdlib.h>
-#include <hidapi.h>
+#include "ncursesdisplay.h"
 #include "first.h"
 
-#define MAX_STR 255
+unsigned char buf[64] = {0};
+hid_device *handle;
+
+// Device state
+uint16_t pot1;
+
+void toggle_led1()
+{
+	static unsigned char CMD = 0x80;
+	int response;
+
+	// Toggle LED (cmd 0x80). The first byte is the report number (0x0).
+	buf[0] = 0x0;
+	buf[1] = CMD;
+	response = hid_write(handle, buf, 64);
+	if(response < 0)
+	{
+		printf("Error sending command %x", CMD);
+		return;
+	}
+}
+
+bool get_push1_state()
+{
+	static unsigned char CMD = 0x81;
+	int response;
+
+	// Request state (cmd 0x81). The first byte is the report number (0x0).
+	buf[0] = 0x0;
+	buf[1] = CMD;
+	response = hid_write(handle, buf, 64);
+	if(response < 0)
+	{
+		printf("Error sending command %x", CMD);
+		return false;
+	}
+
+	// Read requested state
+	response = hid_read(handle, buf, 64);
+	if(response < 0)
+	{
+		printf("Error reading response for command %x", CMD);
+		return false;
+	}
+
+	// Print out the returned buffer.
+	// for (i = 0; i < 2; i++)
+	// 	printf("buf[%d]: %d\n", i, buf[i]);
+	return !buf[1];
+}
+
+uint16_t get_pot1_val()
+{
+	static unsigned char CMD = 0x37;
+	int response;
+
+	// Request state (cmd 0x37). The first byte is the report number (0x0).
+	buf[0] = 0x0;
+	buf[1] = CMD;
+	response = hid_write(handle, buf, 64);
+	if(response < 0)
+	{
+		printf("Error sending command %x", CMD);
+		return -1;
+	}
+
+	// Read in the requested state
+	response = hid_read(handle, buf, 64);
+	if(response < 0)
+	{
+		printf("Error reading response for command %x", CMD);
+		return -1;
+	}
+
+	return merge_uint8(buf[1], buf[2]);
+
+	// Print out the returned buffer.
+	// for (i = 0; i < 3; i++)
+	// 	printf("buf[%d]: %d\n", i, buf[i]);
+}
+
+void read_device_info()
+{
+	int res;
+	wchar_t wstr[MAX_STR];
+
+	// Read the Manufacturer String
+	printf("Trying to read manufacturer string...\n");
+	res = hid_get_manufacturer_string(handle, wstr, MAX_STR);
+	wprintf(L"The manufacturer string is: %ls\n", wstr);
+
+	// Read the Product String
+	res = hid_get_product_string(handle, wstr, MAX_STR);
+	wprintf(L"Product String: %ls\n", wstr);
+
+	// Read the Serial Number String
+	res = hid_get_serial_number_string(handle, wstr, MAX_STR);
+	wprintf(L"Serial Number String: (%d) %ls\n", wstr[0], wstr);
+
+	// Read Indexed String 1
+	res = hid_get_indexed_string(handle, 1, wstr, MAX_STR);
+	wprintf(L"Indexed String 1: %ls\n", wstr);
+}
 
 int main(int argc, char* argv[])
 {
 	int res;
-	unsigned char buf[64] = {0};
-	wchar_t wstr[MAX_STR];
-	hid_device *handle;
 	int i;
 
 	// Initialize the hidapi library
@@ -31,53 +125,37 @@ int main(int argc, char* argv[])
 		printf("Could not open device.\n");
 		exit(EXIT_FAILURE);
 	}
-	// Read the Manufacturer String
-	printf("Trying to read manufacturer string...\n");
-	res = hid_get_manufacturer_string(handle, wstr, MAX_STR);
-	wprintf(L"The manufacturer string is: %s\n", wstr);
+	read_device_info();
 
-	// Read the Product String
-	res = hid_get_product_string(handle, wstr, MAX_STR);
-	wprintf(L"Product String: %s\n", wstr);
+	toggle_led1();
 
-	// Read the Serial Number String
-	res = hid_get_serial_number_string(handle, wstr, MAX_STR);
-	wprintf(L"Serial Number String: (%d) %s\n", wstr[0], wstr);
+	printf("Button is %spressed.\n", get_push1_state() ? "" : "not ");
 
-	// Read Indexed String 1
-	res = hid_get_indexed_string(handle, 1, wstr, MAX_STR);
-	wprintf(L"Indexed String 1: %s\n", wstr);
+	printf("The decimal result is %d\n", get_pot1_val());
 
-	// Toggle LED (cmd 0x80). The first byte is the report number (0x0).
-	buf[0] = 0x0;
-	buf[1] = 0x80;
-	res = hid_write(handle, buf, 64);
+	// Register signal handler
+	if (signal(SIGINT, sig_handler) == SIG_ERR) {
+        printf("\nCan't catch SIGINT\n");
+        exit(EXIT_FAILURE);
+	}
 
-	// Request state (cmd 0x81). The first byte is the report number (0x0).
-	buf[0] = 0x0;
-	buf[1] = 0x81;
-	res = hid_write(handle, buf, 64);
+	// Enter ncurses mode
+	initialize_display();
 
-	// Read requested state
-	res = hid_read(handle, buf, 64);
+	// Main loop
+	while(true) {
+		print_percent_bar(2, get_pot1_val());
+	}
 
-	// Print out the returned buffer.
-	for (i = 0; i < 2; i++)
-		printf("buf[%d]: %d\n", i, buf[i]);
-	printf("Button is %spressed.\n", buf[1] ? "not " : "");
+	print_percent_bar(2, 25);
+	refresh();
+	getch();
 
-	// Request state (cmd 0x37). The first byte is the report number (0x0).
-	buf[0] = 0x0;
-	buf[1] = 0x37;
-	res = hid_write(handle, buf, 64);
-	// Read in the requested state
-	res = hid_read(handle, buf, 64);
+	// Leave ncurses mode
+	end_display();
 
-	printf("The decimal result is %d\n", merge_uint8(buf[1], buf[2]));
-
-	// Print out the returned buffer.
-	for (i = 0; i < 3; i++)
-		printf("buf[%d]: %d\n", i, buf[i]);
+	// Unregister signal handler
+	signal(SIGINT, SIG_DFL);
 
 	// Finalize the hidapi library
 	res = hid_exit();
@@ -85,9 +163,11 @@ int main(int argc, char* argv[])
 	return 0;
 }
 
-uint16_t merge_uint8(uint8_t lowerBits, uint8_t higherBits)
+void sig_handler(int signo)
 {
-	uint16_t result = ((uint16_t)higherBits << 8) | lowerBits;
-	return result;
+	if (signo == SIGINT)
+	{
+		end_display();
+		exit(EXIT_SUCCESS);
+	}
 }
-
