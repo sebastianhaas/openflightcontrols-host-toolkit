@@ -143,13 +143,13 @@ int main(int argc, char* argv[])
 	initialize_display();
 
 	// Main loop
-	while(true) {
-		print_percent_bar(2, get_pot1_val());
+	while(1) {
+		int a;
+		a = (int)((100 / 1023.0) * get_pot1_val()); 
+		print_percent_bar(2, a);
+		refresh();
+		sleep(0.1);
 	}
-
-	print_percent_bar(2, 25);
-	refresh();
-	getch();
 
 	// Leave ncurses mode
 	end_display();

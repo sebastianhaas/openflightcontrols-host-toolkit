@@ -30,9 +30,16 @@ void print_percent_bar(int y, int percent)
  
 
 	percentDrawIndex = (int)(((max_x - LABEL_WIDTH) / 100.0) * percent); 
-	for(i = min_x; i < percentDrawIndex; i++)
+	for(i = min_x; i < max_x; i++)
 	{
-		mvprintw(y, i, "#");
+		if(i < percentDrawIndex) 
+		{
+			mvprintw(y, i, "#");
+		}
+		else
+		{
+			mvprintw(y, i, " ");
+		}
 	}
 
 	mvprintw(y, max_x - LABEL_WIDTH, " %3d%%", percent);
